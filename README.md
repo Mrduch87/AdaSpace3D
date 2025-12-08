@@ -38,7 +38,6 @@ This firmware is designed for the **Adafruit QT Py RP2040**, but works on other 
 > **Note:** The firmware drives **GPIO 3 and GPIO 4 simultaneously**. You can connect your LED to either pin depending on your build, and change the behavior in `UserConfig.h`.
 
 ---
-
 ## 🚀 Quick Start (Windows)
 
 We have included a "One-Click" tool so you don't need to install Arduino IDE or mess with libraries manually.
@@ -46,13 +45,18 @@ We have included a "One-Click" tool so you don't need to install Arduino IDE or 
 1.  **Download** this repository as a ZIP and extract it.
 2.  Open `UserConfig.h` in any text editor to customize your settings (Sensitivity, LED Colors, etc.).
 3.  **Plug in** your RP2040 device.
-4.  Double-click **`FLASH.bat`**.
+4.  **Enter Bootloader Mode:**
+    * Hold down the **BOOT** button.
+    * Press and release the **RESET** button.
+    * Release the **BOOT** button.
+    * *A new drive named `RPI-RP2` should appear on your computer.*
+5.  Double-click **`FLASH.bat`**.
 
 The script will automatically:
 * Download the compiler (Arduino CLI).
 * Install the RP2040 Core and Infineon Sensor libraries.
 * Compile the firmware with the correct "SpaceMouse" USB ID.
-* Detect your device and flash it.
+* Detect the `RPI-RP2` drive and flash it instantly.
 
 ---
 
