@@ -1,6 +1,7 @@
 /*
- * AdaSpace3D - Unified Firmware (Reactive Color)
- * * Mode 2: "Dim-to-Bright" Reactive lighting (User Color)
+ * AdaSpace3D - Unified Firmware (Golden Release)
+ * * Features: Dual LED Drive, Reactive Lighting, Auto-Hardware Detect
+ * * Safety:   Includes Sensor Watchdog to auto-reset frozen I2C lines
  */
 
 #include "Adafruit_TinyUSB.h"
@@ -9,8 +10,10 @@
 #include "UserConfig.h"
 
 // --- CONSTANTS ---
-#define PIN_NEOPIXEL  4
-#define PIN_SIMPLE    3
+#define PIN_NEOPIXEL   4
+#define PIN_SIMPLE     3
+#define HANG_THRESHOLD 50              // consecutive identical readings before reset
+#define PREVENTIVE_RESET_INTERVAL 0    // Set to 300000 (5 mins) if you want periodic resets
 
 // --- LED SETUP ---
 Adafruit_NeoPixel strip(NUM_ADDRESSABLE_LEDS, PIN_NEOPIXEL, NEO_GRB + NEO_KHZ800);
@@ -21,10 +24,18 @@ const uint8_t physToHID[] = {13, 14, 15, 16};
 bool currentButtonState[] = {false, false, false, false};
 bool prevButtonState[] = {false, false, false, false};
 
+// --- DATA STRUCTURES ---
 struct MagCalibration {
   double x_neutral = 0.0, y_neutral = 0.0, z_neutral = 0.0;
   bool calibrated = false;
 } magCal;
+
+struct SensorWatchdog {
+  double last_x = 0.0, last_y = 0.0, last_z = 0.0;
+  int sameValueCount = 0;
+  unsigned long lastResetTime = 0;
+  unsigned long lastPreventiveReset = 0;
+} watchdog;
 
 using namespace ifx::tlx493d;
 
@@ -49,18 +60,12 @@ Adafruit_USBD_HID usb_hid;
 // --- LED LOGIC ---
 
 void updateHardwareLeds(uint8_t r, uint8_t g, uint8_t b) {
-  // 1. Update Addressable Strip
   uint32_t c = strip.Color(r, g, b);
   strip.fill(c);
   strip.show();
 
-  // 2. Update Simple LED (PWM)
-  // Convert RGB to brightness (Luminance)
   int brightness = (r * 77 + g * 150 + b * 29) >> 8; 
-  
-  // Apply Global Brightness limit
   brightness = (brightness * LED_BRIGHTNESS) / 255;
-  
   analogWrite(PIN_SIMPLE, brightness);
 }
 
@@ -72,62 +77,68 @@ void blinkError() {
 }
 
 void handleLeds(double totalMove) {
-  // MODE 0: STATIC (Solid Color)
-  if (LED_MODE == 0) {
+  if (LED_MODE == 0) { // STATIC
     updateHardwareLeds(LED_COLOR_R, LED_COLOR_G, LED_COLOR_B);
   }
-  
-  // MODE 1: BREATHING (Sine wave fade)
-  else if (LED_MODE == 1) {
+  else if (LED_MODE == 1) { // BREATHING
     float val = (exp(sin(millis()/2000.0*PI)) - 0.36787944)*108.0;
     uint8_t r = (LED_COLOR_R * (int)val) / 255;
     uint8_t g = (LED_COLOR_G * (int)val) / 255;
     uint8_t b = (LED_COLOR_B * (int)val) / 255;
     updateHardwareLeds(r, g, b);
   }
-  
-  // MODE 2: REACTIVE (Dim Resting -> Bright Active)
-  else if (LED_MODE == 2) {
-      // 1. Define Brightness Range (0-255 scaling factor)
-      int minScale = 50;  // Resting dimness (approx 20%)
-      int maxScale = 255; // Full brightness
-      
+  else if (LED_MODE == 2) { // REACTIVE
+      int minScale = 50;  
+      int maxScale = 255; 
       int currentScale = minScale;
 
-      // 2. If moving, increase brightness
       if (totalMove > CONFIG_DEADZONE) {
-         // Scale factor: multiply movement by 30 to ramp up brightness quickly
          int addedIntensity = (int)(totalMove * 30.0);
          currentScale = constrain(minScale + addedIntensity, minScale, maxScale);
       }
       
-      // 3. Apply brightness scale to USER COLOR
-      // This preserves the Hue/Saturation but changes Intensity
       uint8_t r = (LED_COLOR_R * currentScale) / 255;
       uint8_t g = (LED_COLOR_G * currentScale) / 255;
       uint8_t b = (LED_COLOR_B * currentScale) / 255;
-      
       updateHardwareLeds(r, g, b);
   }
 }
 
+void resetMagnetometer() {
+  // Briefly flash Red to indicate reset
+  updateHardwareLeds(255, 0, 0);
+  
+  activeSensor->end();
+  delay(50);
+  
+  // Restart the correct Wire interface
+  if (activeSensor == &magCable) {
+      Wire1.end(); delay(50); Wire1.begin(); 
+  } else {
+      Wire.end(); delay(50); Wire.begin();
+  }
+  delay(50);
+  
+  if (activeSensor->begin()) {
+    watchdog.sameValueCount = 0;
+    watchdog.lastResetTime = millis();
+    // Return to normal color
+    updateHardwareLeds(LED_COLOR_R, LED_COLOR_G, LED_COLOR_B);
+  }
+}
+
 void setup() {
-  // Init Hardware
   pinMode(PIN_SIMPLE, OUTPUT);
   strip.begin();
   strip.setBrightness(LED_BRIGHTNESS);
-  
-  // Boot Status (Red)
-  updateHardwareLeds(255, 0, 0);
+  updateHardwareLeds(255, 0, 0); // Boot Red
 
 #if DEBUG_MODE
   Serial.begin(115200);
 #endif
 
-  // Buttons
   for(uint8_t i = 0; i < 4; i++) pinMode(physPins[i], INPUT_PULLUP);
 
-  // USB
   TinyUSBDevice.setID(USB_VID, USB_PID);
   usb_hid.setReportDescriptor(spaceMouse_hid_report_desc, sizeof(spaceMouse_hid_report_desc));
   usb_hid.setPollInterval(2);
@@ -135,40 +146,30 @@ void setup() {
 
   while(!TinyUSBDevice.mounted()) delay(100);
   
-  // Probe Sensors
   pinMode(MAG_POWER_PIN, OUTPUT);
   digitalWrite(MAG_POWER_PIN, HIGH);
   delay(10); 
 
-  // Check Cable
   Wire1.begin(); Wire1.setClock(400000);
-  bool cableFound = magCable.begin();
-
-  // Check Solder
-  Wire.begin(); Wire.setClock(400000);
-  bool solderFound = magSolder.begin();
-
-  // Decide active sensor and flash indicator
-  if (cableFound) {
+  if (magCable.begin()) {
      activeSensor = &magCable;
-     // Flash Green for Cable
-     updateHardwareLeds(0, 255, 0); delay(500);
-  } 
-  else if (solderFound) {
-     activeSensor = &magSolder;
-     // Flash Cyan for Solder
-     updateHardwareLeds(0, 255, 255); delay(500);
+     updateHardwareLeds(0, 255, 0); delay(500); // Green for Cable
   } 
   else {
-     blinkError(); 
+     Wire.begin(); Wire.setClock(400000);
+     if (magSolder.begin()) {
+        activeSensor = &magSolder;
+        updateHardwareLeds(0, 255, 255); delay(500); // Cyan for Solder
+     } else {
+        blinkError(); 
+     }
   }
 
-  // Go to Calibration (White Pulse)
+  watchdog.lastPreventiveReset = millis();
   calibrateMagnetometer();
 }
 
 void loop() {
-  // Buttons
   for(uint8_t i = 0; i < 4; i++) {
     currentButtonState[i] = (digitalRead(physPins[i]) == LOW);
     if (currentButtonState[i] != prevButtonState[i]) {
@@ -187,7 +188,6 @@ void calibrateMagnetometer() {
   double sumX = 0, sumY = 0, sumZ = 0;
   int valid = 0;
   
-  // Calibration Signal: White Pulse
   updateHardwareLeds(0, 0, 0); delay(100);
   updateHardwareLeds(255, 255, 255); 
   
@@ -205,11 +205,8 @@ void calibrateMagnetometer() {
     magCal.y_neutral = sumY / valid;
     magCal.z_neutral = sumZ / valid;
     magCal.calibrated = true;
-    
-    // Done: Blackout briefly before loop takes over
     updateHardwareLeds(0, 0, 0); delay(200);
   } else {
-    // Retry: Red Blink
     for(int i=0; i<5; i++) {
        updateHardwareLeds(255, 0, 0); delay(50);
        updateHardwareLeds(0, 0, 0); delay(50);
@@ -221,29 +218,56 @@ void calibrateMagnetometer() {
 void readAndSendMagnetometerData() {
   double x, y, z;
   
+  // Preventive Reset Check
+  if(PREVENTIVE_RESET_INTERVAL > 0 && millis() - watchdog.lastPreventiveReset > PREVENTIVE_RESET_INTERVAL) {
+    resetMagnetometer();
+    watchdog.lastPreventiveReset = millis();
+    return;
+  }
+
   if(activeSensor->getMagneticField(&x, &y, &z)) {
-      if(magCal.calibrated) {
-        x -= magCal.x_neutral;
-        y -= magCal.y_neutral;
-        z -= magCal.z_neutral;
+      if(isfinite(x) && isfinite(y) && isfinite(z)) {
+          
+          // --- WATCHDOG LOGIC ---
+          // If values are IDENTICAL to last read, sensor might be frozen
+          if(x == watchdog.last_x && y == watchdog.last_y && z == watchdog.last_z) {
+            watchdog.sameValueCount++;
+            if(watchdog.sameValueCount >= HANG_THRESHOLD) {
+              resetMagnetometer();
+              return;
+            }
+          } else {
+            watchdog.sameValueCount = 0;
+            watchdog.last_x = x;
+            watchdog.last_y = y;
+            watchdog.last_z = z;
+          }
+
+          // Calibration
+          if(magCal.calibrated) {
+            x -= magCal.x_neutral;
+            y -= magCal.y_neutral;
+            z -= magCal.z_neutral;
+          }
+          
+          double totalMove = abs(x) + abs(y) + abs(z);
+          handleLeds(totalMove);
+
+          if(abs(x) < CONFIG_DEADZONE) x = 0.0;
+          if(abs(y) < CONFIG_DEADZONE) y = 0.0;
+          if(abs(z) < CONFIG_ZOOM_DEADZONE) z = 0.0;
+
+          int16_t tx = (int16_t)(-x * CONFIG_TRANS_SCALE);
+          int16_t ty = (int16_t)(-y * CONFIG_TRANS_SCALE);
+          int16_t tz = (int16_t)(z * CONFIG_ZOOM_SCALE);
+          int16_t rx = (int16_t)(y * CONFIG_ROT_SCALE);
+          int16_t ry = (int16_t)(x * CONFIG_ROT_SCALE);
+          
+          send_tx_rx_reports(tx, ty, tz, rx, ry, 0);
       }
-      
-      double totalMove = abs(x) + abs(y) + abs(z);
-      
-      // Update LEDs
-      handleLeds(totalMove);
-
-      if(abs(x) < CONFIG_DEADZONE) x = 0.0;
-      if(abs(y) < CONFIG_DEADZONE) y = 0.0;
-      if(abs(z) < CONFIG_ZOOM_DEADZONE) z = 0.0;
-
-      int16_t tx = (int16_t)(-x * CONFIG_TRANS_SCALE);
-      int16_t ty = (int16_t)(-y * CONFIG_TRANS_SCALE);
-      int16_t tz = (int16_t)(z * CONFIG_ZOOM_SCALE);
-      int16_t rx = (int16_t)(y * CONFIG_ROT_SCALE);
-      int16_t ry = (int16_t)(x * CONFIG_ROT_SCALE);
-      
-      send_tx_rx_reports(tx, ty, tz, rx, ry, 0);
+  } else {
+      // If we get an error reading, report 0
+      send_tx_rx_reports(0, 0, 0, 0, 0, 0);
   }
 }
 
