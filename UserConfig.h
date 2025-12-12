@@ -1,55 +1,78 @@
 #ifndef USER_CONFIG_H
 #define USER_CONFIG_H
 
-// ===================================================================================
-//   ADA SPACE 3D - USER CONFIGURATION
-// ===================================================================================
-
-// --- LED CONFIGURATION ---
-// The firmware drives BOTH outputs simultaneously. Connect whichever you like.
-// - Addressable Strip: GPIO 4
-// - Simple LED:        GPIO 3
-
-#define LED_MODE            2      // 0 = Static (Solid Color)
-                                   // 1 = Breathing (Gently Fades)
-                                   // 2 = Debug / Reactive (Status Colors + White Flash on Move)
-
-// Settings for Addressable Strip (GPIO 4)
-#define NUM_ADDRESSABLE_LEDS 3      // How many LEDs are in your strip?
-#define LED_BRIGHTNESS       128    // 0 to 255 (Global brightness)
-
-// Settings for Static/Breathing Modes (Ignored in Debug Mode)
-// Set your preferred color (0-255)
-#define LED_COLOR_R         0      // Red
-#define LED_COLOR_G         255    // Green
-#define LED_COLOR_B         0    // Blue (Cyan)
+#include <Arduino.h>
 
 // --- PIN DEFINITIONS ---
-#define MAG_POWER_PIN       15     
+#define PIN_SDA             0
+#define PIN_SCL             1
+#define PIN_NEOPIXEL        12 // QT Py RP2040 Built-in
+#define MAG_POWER_PIN       11 // Power pin for sensor
 
-// Button Pins
-#define BUTTON1_PIN         A0
-#define BUTTON2_PIN         A1
-#define BUTTON3_PIN         A2
-#define BUTTON4_PIN         A3
+// Simple LED (optional)
+#define PIN_SIMPLE          25 
 
-// --- SENSOR SETTINGS ---
-// SENSITIVITY: 150.0 is the "Golden" value for this sensor
-#define CONFIG_TRANS_SCALE     100 
-#define CONFIG_ZOOM_SCALE      50  
-#define CONFIG_ROT_SCALE       40 
+// Buttons
+#define BUTTON1_PIN         29
+#define BUTTON2_PIN         28
+#define BUTTON3_PIN         27
+#define BUTTON4_PIN         26
 
-// DEADZONES: Keep small (1.0) because raw values are tiny
-#define CONFIG_DEADZONE        1.0    
-#define CONFIG_ZOOM_DEADZONE   2.5  
+// --- CONFIGURATION STRUCT ---
+// Increment MAGIC to force EEPROM reset when structure changes
+#define CONFIG_MAGIC 0xAD45DAC4 
 
-// --- USB IDENTIFICATION ---
-// 0x046d / 0xc626 = SpaceNavigator (Best for DIY compatibility)
-#define USB_VID             0x256f
-#define USB_PID             0xc631
+struct SpaceMouseConfig {
+  uint32_t magic;
 
-// --- DEBUG MODE ---
-// MUST be false for normal use. True = Serial Monitor but NO Driver.
-#define DEBUG_MODE          false
+  // --- PHYSICS ---
+  float smoothing;        // 0.0 (raw) to 0.95 (super smooth)
+  float gamma;            // 1.0 (linear) to 3.0 (cubic precision)
+  float deadzone;         // Global Deadzone (approx 0.5 - 5.0)
 
-#endif // USER_CONFIG_H
+  // --- AXIS GAINS (Sensitivity) ---
+  float gain_tx, gain_ty, gain_tz;
+  float gain_rx, gain_ry, gain_rz;
+
+  // --- AXIS INVERTS ---
+  bool inv_tx, inv_ty, inv_tz;
+  bool inv_rx, inv_ry, inv_rz;
+
+  // --- MOUNTING ---
+  bool swap_xy;           // Rotates Virtual North by 90deg
+
+  // --- BUTTON MAPPING ---
+  uint8_t button_map[4];  // HID Button IDs for Phys 1-4
+
+  // --- LEDS ---
+  uint8_t led_mode;       // 0=Static, 1=Breathing, 2=Reactive
+  uint8_t led_color_r;
+  uint8_t led_color_g;
+  uint8_t led_color_b;
+  uint8_t led_brightness; // 0-255
+
+  // --- ENCODER ---
+  bool enc_enabled;
+  float enc_gain;
+  bool enc_invert;
+};
+
+// Global Config Instance
+extern SpaceMouseConfig config;
+
+// Default Values
+#define DEFAULT_SMOOTHING 0.5f
+#define DEFAULT_GAMMA     1.5f
+#define DEFAULT_DEADZONE  1.0f
+
+#define DEFAULT_GAIN_TRANS 100.0f
+#define DEFAULT_GAIN_ROT   40.0f
+#define DEFAULT_GAIN_ZOOM  50.0f
+
+#define DEFAULT_LED_MODE 2
+#define DEFAULT_LED_R    0
+#define DEFAULT_LED_G    255
+#define DEFAULT_LED_B    255
+#define DEFAULT_LED_BRIGHTNESS 50
+
+#endif

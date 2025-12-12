@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AdaSpace3D Dashboard</title>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --card-bg: #1e293b;
+            --panel-bg: #334155;
+            --text-color: #e2e8f0;
+            --accent: #38bdf8;
+            --success: #22c55e;
+            --danger: #ef4444;
+            --active-btn: #00ff00;
+        }
+
+        body {
+            font-family: system-ui, sans-serif;
+            background: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        h1 {
+            color: var(--accent);
+            margin: 0 0 20px 0;
+            font-size: 1.5rem;
+            text-align: center;
+        }
+
+        .dashboard {
+            display: grid;
+            grid-template-columns: 350px 1fr;
+            gap: 20px;
+            height: calc(100vh - 80px);
+        }
+
+        /* LEFT COLUMN (VISUALIZER) */
+        .vis-column {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        /* RIGHT COLUMN (CONTROLS) */
+        .controls-column {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            overflow-y: auto;
+            padding-right: 10px;
+        }
+
+        .panel {
+            background: var(--card-bg);
+            padding: 15px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
+        }
+
+        .panel h3 {
+            margin-top: 0;
+            color: var(--accent);
+            border-bottom: 1px solid #444;
+            padding-bottom: 10px;
+        }
+
+        .control-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            background: rgba(0, 0, 0, 0.2);
+            padding: 8px;
+            border-radius: 6px;
+            font-size: 0.9rem;
+        }
+
+        .axis-row {
+            display: grid;
+            grid-template-columns: 60px 1fr 40px 60px;
+            gap: 10px;
+            align-items: center;
+            margin-bottom: 8px;
+            background: rgba(0, 0, 0, 0.2);
+            padding: 6px;
+            border-radius: 6px;
+            font-size: 0.85rem;
+        }
+
+        /* VISUALIZER STYLES */
+        .vis-container {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            align-items: center;
+            background: #000;
+            padding: 15px;
+            border-radius: 12px;
+        }
+
+        canvas {
+            background: #111;
+            border: 2px solid #333;
+            border-radius: 50%;
+            width: 220px;
+            height: 220px;
+        }
+
+        .bar-container {
+            width: 30px;
+            height: 220px;
+            background: #111;
+            border: 2px solid #333;
+            position: relative;
+            border-radius: 15px;
+            overflow: hidden;
+        }
+
+        .bar-fill {
+            position: absolute;
+            bottom: 50%;
+            left: 0;
+            width: 100%;
+            background: var(--accent);
+        }
+
+        /* BUTTON CHECK */
+        .btn-indicators {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-bottom: 10px;
+        }
+
+        .btn-led {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #222;
+            border: 2px solid #444;
+            transition: 0.1s;
+        }
+
+        .btn-led.active {
+            background: var(--active-btn);
+            box-shadow: 0 0 10px var(--active-btn);
+            border-color: #fff;
+        }
+
+        /* INPUTS */
+        input[type="range"] {
+            width: 100%;
+            cursor: pointer;
+        }
+
+        input[type="number"] {
+            width: 50px;
+            background: #000;
+            color: #fff;
+            border: 1px solid #555;
+            padding: 4px;
+            border-radius: 4px;
+        }
+
+        select {
+            background: #000;
+            color: #fff;
+            padding: 5px;
+            border-radius: 4px;
+            width: 100%;
+        }
+
+        button {
+            background: var(--accent);
+            border: none;
+            padding: 12px;
+            width: 100%;
+            border-radius: 6px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-bottom: 10px;
+        }
+
+        .actions {
+            margin-top: auto;
+        }
+
+        .save-btn {
+            background: var(--success);
+            color: #fff;
+        }
+
+        .reset-btn {
+            background: var(--danger);
+            color: #fff;
+        }
+
+        .connect-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(15, 23, 42, 0.95);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- CONNECT OVERLAY -->
+    <div id="connectOverlay" class="connect-overlay">
+        <div class="panel" style="text-align: center; width: 300px;">
+            <h2>🚀 AdaSpace3D</h2>
+            <p>Connect to start tuning.</p>
+            <button id="connectBtn">🔌 Connect Device</button>
+            <p id="status" style="color: #ef4444; font-size: 0.9rem;"></p>
+        </div>
+    </div>
+
+    <h1>🎛️ Real-Time Dashboard</h1>
+
+    <div class="dashboard">
+
+        <!-- LEFT COL: VISUAL & PHYSICS -->
+        <div class="vis-column">
+            <!-- VISUALIZER -->
+            <div class="panel">
+                <h3>👁️ Live View</h3>
+                <div class="vis-container">
+                    <canvas id="xyCanvas" width="220" height="220"></canvas>
+                    <div class="bar-container">
+                        <div id="zBar" class="bar-fill" style="height: 0px; bottom: 50%;"></div>
+                    </div>
+                </div>
+                <div style="text-align:center; margin-top:10px;">
+                    <label><input type="checkbox" id="streamToggle" checked onchange="toggleStream()"> Stream
+                        Active</label>
+                </div>
+            </div>
+
+            <!-- ACTIONS -->
+            <div class="panel actions">
+                <button class="save-btn" onclick="saveConfig()">💾 Save Changes</button>
+                <button class="reset-btn" onclick="resetConfig()">⚠️ Reset Defaults</button>
+            </div>
+        </div>
+
+        <!-- RIGHT COL: CONTROLS GRID -->
+        <div class="controls-column">
+
+            <!-- PHYSICS -->
+            <div class="panel">
+                <h3>⚛️ Physics</h3>
+                <div class="control-row">
+                    <label>Smoothing</label>
+                    <div style="flex:1; margin:0 10px;"><input type="range" id="smooth" min="0" max="0.95" step="0.01">
+                    </div>
+                    <span id="smooth_val">0.0</span>
+                </div>
+                <div class="control-row">
+                    <label>Gamma</label>
+                    <div style="flex:1; margin:0 10px;"><input type="range" id="gamma" min="1.0" max="3.0" step="0.1">
+                    </div>
+                    <span id="gamma_val">1.0</span>
+                </div>
+                <div class="control-row">
+                    <label>Deadzone</label>
+                    <input type="number" id="dz" step="0.1">
+                </div>
+            </div>
+
+            <!-- AXES -->
+            <div class="panel">
+                <h3>📐 Axis Gain & Invert</h3>
+                <div class="axis-row" style="opacity:0.6; font-size:0.75rem;">
+                    <span>AXIS</span> <span>GAIN</span> <span>VAL</span> <span>INV</span>
+                </div>
+                <div id="axesContainer"></div>
+            </div>
+
+            <!-- HARDWARE -->
+            <div class="panel">
+                <h3>⚙️ Hardware</h3>
+                <div class="control-row"><label>Swap X/Y (90°)</label><input type="checkbox" id="sw_xy"></div>
+                <div class="control-row"><label>Enable Encoder</label><input type="checkbox" id="enc"></div>
+                <div class="control-row"><label>Encoder Gain</label><input type="number" id="e_g" step="0.1"></div>
+                <div class="control-row"><label>Inv Encoder</label><input type="checkbox" id="e_i"></div>
+            </div>
+
+            <!-- BUTTONS -->
+            <div class="panel">
+                <h3>Buttons Test & Map</h3>
+                <div class="btn-indicators">
+                    <div id="led1" class="btn-led" title="Phys 1"></div>
+                    <div id="led2" class="btn-led" title="Phys 2"></div>
+                    <div id="led3" class="btn-led" title="Phys 3"></div>
+                    <div id="led4" class="btn-led" title="Phys 4"></div>
+                </div>
+                <hr style="border:0; border-top:1px solid #444; margin:10px 0;">
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+                    <div><label>Btn 1</label><select id="btn1"></select></div>
+                    <div><label>Btn 2</label><select id="btn2"></select></div>
+                    <div><label>Btn 3</label><select id="btn3"></select></div>
+                    <div><label>Btn 4</label><select id="btn4"></select></div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        const AXES = ['tx', 'ty', 'tz', 'rx', 'ry', 'rz'];
+        const AXIS_NAMES = ['Pan X', 'Pan Y', 'Zoom', 'Tilt X', 'Tilt Y', 'Twist'];
+
+        // --- VISUALIZER ---
+        const canvas = document.getElementById('xyCanvas');
+        const ctx = canvas.getContext('2d');
+        const zBar = document.getElementById('zBar');
+
+        function drawVis(x, y, z) {
+            ctx.clearRect(0, 0, 220, 220);
+
+            // Grid
+            ctx.strokeStyle = '#333'; ctx.beginPath();
+            ctx.moveTo(110, 0); ctx.lineTo(110, 220);
+            ctx.moveTo(0, 110); ctx.lineTo(220, 110);
+            ctx.stroke();
+
+            // Deadzone
+            const dz = parseFloat(document.getElementById('dz').value) || 1;
+            ctx.strokeStyle = '#555'; ctx.beginPath();
+            ctx.arc(110, 110, dz * 7, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // Dot
+            const scale = 4;
+            const drawX = 110 + (x * scale);
+            const drawY = 110 + (y * scale);
+
+            ctx.fillStyle = '#38bdf8'; ctx.beginPath();
+            ctx.arc(drawX, drawY, 6, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Z Bar
+            const h = Math.min(110, Math.abs(z * scale));
+            zBar.style.height = h + 'px';
+            zBar.style.bottom = z > 0 ? '50%' : (110 - h) + 'px';
+            zBar.style.backgroundColor = z > 0 ? '#38bdf8' : '#ef4444';
+        }
+
+        function updateButtons(b1, b2, b3, b4) {
+            document.getElementById('led1').classList.toggle('active', b1 > 0);
+            document.getElementById('led2').classList.toggle('active', b2 > 0);
+            document.getElementById('led3').classList.toggle('active', b3 > 0);
+            document.getElementById('led4').classList.toggle('active', b4 > 0);
+        }
+
+        async function toggleStream() {
+            const on = document.getElementById('streamToggle').checked;
+            if (port) await sendCommand(on ? "STREAM:ON" : "STREAM:OFF");
+        }
+
+        // --- UI INIT ---
+        function initUI() {
+            const container = document.getElementById('axesContainer');
+            AXES.forEach((ax, i) => {
+                container.innerHTML += `
+                    <div class="axis-row">
+                        <span>${AXIS_NAMES[i]}</span>
+                        <input type="range" id="g_${ax}" min="10" max="500" value="100" oninput="updVal('g_${ax}')">
+                        <span id="val_g_${ax}">100</span>
+                        <label><input type="checkbox" id="i_${ax}"> Inv</label>
+                    </div>`;
+            });
+
+            const btnOpts = '<option value="0">Off</option>' +
+                Array.from({ length: 32 }, (_, i) => `<option value="${i + 1}">B${i + 1}</option>`).join('');
+            ['btn1', 'btn2', 'btn3', 'btn4'].forEach(id => document.getElementById(id).innerHTML = btnOpts);
+
+            document.getElementById('smooth').addEventListener('input', e => document.getElementById('smooth_val').innerText = e.target.value);
+            document.getElementById('gamma').addEventListener('input', e => document.getElementById('gamma_val').innerText = e.target.value);
+            drawVis(0, 0, 0);
+        }
+        function updVal(id) { document.getElementById('val_' + id).innerText = document.getElementById(id).value; }
+        initUI();
+
+        // --- SERIAL ---
+        let port, reader, keepReading = false;
+
+        document.getElementById('connectBtn').addEventListener('click', async () => {
+            try {
+                port = await navigator.serial.requestPort({});
+                await port.open({ baudRate: 115200 });
+
+                document.getElementById('connectOverlay').classList.add('hidden');
+
+                keepReading = true;
+                readLoop();
+                setTimeout(() => sendCommand("?"), 500);
+                setTimeout(() => toggleStream(), 1000);
+            } catch (e) { document.getElementById('status').innerText = e; }
+        });
+
+        async function sendCommand(cmd) {
+            const w = port.writable.getWriter();
+            await w.write(new TextEncoder().encode(cmd + "\n"));
+            w.releaseLock();
+        }
+
+        async function readLoop() {
+            while (port.readable && keepReading) {
+                reader = port.readable.getReader();
+                try {
+                    while (true) {
+                        const { value, done } = await reader.read();
+                        if (done) break;
+                        handleData(new TextDecoder().decode(value));
+                    }
+                } catch (e) { console.error(e); }
+                finally { reader.releaseLock(); }
+            }
+        }
+
+        let buffer = "";
+        function handleData(chunk) {
+            buffer += chunk;
+            const lines = buffer.split('\n');
+            buffer = lines.pop();
+
+            for (let line of lines) {
+                line = line.trim();
+                if (line.startsWith("{")) loadJson(line);
+                else if (line.startsWith("GRA:")) {
+                    const parts = line.substring(4).split(',');
+                    // x, y, z, b1, b2, b3, b4
+                    drawVis(parseFloat(parts[0]), parseFloat(parts[1]), parseFloat(parts[2]));
+                    if (parts.length > 3) {
+                        updateButtons(parseInt(parts[3]), parseInt(parts[4]), parseInt(parts[5]), parseInt(parts[6]));
+                    }
+                }
+            }
+        }
+
+        function loadJson(json) {
+            try {
+                const d = JSON.parse(json);
+                setVal('smooth', d.smooth); document.getElementById('smooth_val').innerText = d.smooth;
+                setVal('gamma', d.gamma); document.getElementById('gamma_val').innerText = d.gamma;
+                setVal('dz', d.dz);
+                AXES.forEach(ax => {
+                    setVal(`g_${ax}`, d[`g_${ax}`]); updVal(`g_${ax}`);
+                    setCheck(`i_${ax}`, d[`i_${ax}`]);
+                });
+                setCheck('sw_xy', d.sw_xy); setCheck('enc', d.enc); setVal('e_g', d.e_g); setCheck('e_i', d.e_i);
+                if (d.btns) d.btns.forEach((b, i) => document.getElementById(`btn${i + 1}`).value = b);
+            } catch (e) { console.error(e); }
+        }
+
+        async function saveConfig() {
+            const d = {};
+            d.smooth = getFloat('smooth'); d.gamma = getFloat('gamma'); d.dz = getFloat('dz');
+            AXES.forEach(ax => { d[`g_${ax}`] = getFloat(`g_${ax}`); d[`i_${ax}`] = getCheck(`i_${ax}`); });
+            d.sw_xy = getCheck('sw_xy'); d.enc = getCheck('enc'); d.e_g = getFloat('e_g'); d.e_i = getCheck('e_i');
+
+            // Dummy LED vals to keep JSON struct valid if FW expects it (though we removed checks in write)
+            // Actually FW parser still checks for l_mo etc. We can omit them, isNull check handles it.
+            // But let's send defaults just in case? No, isNull handles it. 
+
+            d.btns = [1, 2, 3, 4].map(i => parseInt(document.getElementById(`btn${i}`).value));
+            await sendCommand("SAVE:" + JSON.stringify(d));
+        }
+
+        window.resetConfig = async () => { if (confirm("Reset?")) await sendCommand("RESET"); };
+        const val = (id) => document.getElementById(id).value;
+        const setVal = (id, v) => document.getElementById(id).value = v;
+        const setCheck = (id, v) => document.getElementById(id).checked = v;
+        const getFloat = (id) => parseFloat(document.getElementById(id).value);
+        const getCheck = (id) => document.getElementById(id).checked;
+
+    </script>
+</body>
+
+</html>
