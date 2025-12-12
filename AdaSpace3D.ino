@@ -403,14 +403,18 @@ void loop() {
                              (int16_t)(val_rx), (int16_t)(val_ry), rz);
           
           if(streaming) {
-             Serial.print("GRA:");
-             Serial.print(x); Serial.print(",");
-             Serial.print(y); Serial.print(",");
-             Serial.print(z); Serial.print(",");
-             Serial.print(currentButtonState[0]); Serial.print(",");
-             Serial.print(currentButtonState[1]); Serial.print(",");
-             Serial.print(currentButtonState[2]); Serial.print(",");
-             Serial.println(currentButtonState[3]);
+             static unsigned long lastStream = 0;
+             if(millis() - lastStream > 50) { // 20Hz Limit
+               lastStream = millis();
+               Serial.print("GRA:");
+               Serial.print(x); Serial.print(",");
+               Serial.print(y); Serial.print(",");
+               Serial.print(z); Serial.print(",");
+               Serial.print(currentButtonState[0]); Serial.print(",");
+               Serial.print(currentButtonState[1]); Serial.print(",");
+               Serial.print(currentButtonState[2]); Serial.print(",");
+               Serial.println(currentButtonState[3]);
+             }
           }
       }
   }
