@@ -198,7 +198,7 @@ function Install-Dependencies {
             Write-Info "Installing $lib..."
             & $ARDUINO_CLI lib install $lib 2>&1 | Out-Null
             if ($LASTEXITCODE -ne 0) {
-                 Exit-WithError "Failed to install $lib"
+                Exit-WithError "Failed to install $lib"
             }
         }
         Write-Success "$lib is ready."
@@ -288,14 +288,14 @@ function Compile-Firmware {
     # --- FIXED FLAGS FOR COMPILER ---
     # We now rely on standard build properties which the RP2040 core handles natively.
     
-    $propVid       = "build.vid=$USB_VID"
-    $propPid       = "build.pid=$USB_PID"
-    $propUsbVid    = "build.usbvid=-DUSBD_VID=$USB_VID"
-    $propUsbPid    = "build.usbpid=-DUSBD_PID=$USB_PID"
+    $propVid = "build.vid=$USB_VID"
+    $propPid = "build.pid=$USB_PID"
+    $propUsbVid = "build.usbvid=-DUSBD_VID=$USB_VID"
+    $propUsbPid = "build.usbpid=-DUSBD_PID=$USB_PID"
     
     # Careful quoting for properties with spaces
-    $propProduct   = "build.usb_product=\`"$USB_PRODUCT\`""
-    $propMfg       = "build.usb_manufacturer=\`"$USB_MANUFACTURER\`""
+    $propProduct = "build.usb_product=\`"$USB_PRODUCT\`""
+    $propMfg = "build.usb_manufacturer=\`"$USB_MANUFACTURER\`""
     
     # Build the argument string manually to handle paths with spaces correctly
     $argString = "compile --fqbn `"$fqbn`" " +

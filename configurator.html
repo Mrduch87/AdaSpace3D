@@ -23,22 +23,32 @@
             color: var(--text-color);
             margin: 0;
             padding: 20px;
-            height: 100vh;
-            overflow: hidden;
+            /* Allow body to scroll naturally */
+            min-height: 100vh;
         }
 
         h1 {
             color: var(--accent);
-            margin: 0 0 20px 0;
-            font-size: 1.5rem;
             text-align: center;
+            margin-bottom: 30px;
+            font-size: 1.5rem;
         }
 
         .dashboard {
             display: grid;
-            grid-template-columns: 350px 1fr;
+            /* Force side-by-side: Left col fixed 340px, Right col takes rest */
+            grid-template-columns: 340px 1fr;
             gap: 20px;
-            height: calc(100vh - 80px);
+            /* Allow full height scrolling */
+            min-height: calc(100vh - 80px);
+            align-items: start;
+        }
+
+        /* Responsive: Stack if screen is narrower than 900px */
+        @media (max-width: 900px) {
+            .dashboard {
+                grid-template-columns: 1fr;
+            }
         }
 
         /* LEFT COLUMN (VISUALIZER) */
@@ -51,10 +61,11 @@
         /* RIGHT COLUMN (CONTROLS) */
         .controls-column {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            /* Panels auto-fit: minimum 280px wide */
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
             gap: 20px;
-            overflow-y: auto;
-            padding-right: 10px;
+            /* Ensure it doesn't overflow horizontally */
+            width: 100%;
         }
 
         .panel {
@@ -249,20 +260,48 @@
                     </div>
                 </div>
                 <div style="text-align:center; margin-top:10px;">
-                    <label><input type="checkbox" id="streamToggle" checked onchange="toggleStream()"> Stream
-                        Active</label>
+                    <label style="margin-right:10px;">
+                        <input type="checkbox" id="streamToggle" checked onchange="toggleStream()"> Stream Active
+                    </label>
+                    <button onclick="sendCommand('STREAM:ON')"
+                        style="width:auto; padding:5px 10px; font-size:0.8rem; background:#444;">Force On</button>
                 </div>
             </div>
 
-            <!-- ACTIONS -->
+
+
+            <!-- ACTIONS (Restored to Left Column) -->
             <div class="panel actions">
                 <button class="save-btn" onclick="saveConfig()">💾 Save Changes</button>
                 <button class="reset-btn" onclick="resetConfig()">⚠️ Reset Defaults</button>
+
+                <hr style="border:0; border-top:1px solid #444; margin:15px 0;">
+
+                <button onclick="enterBootMode()" id="bootBtn"
+                    style="background: #f59e0b; color: #000; margin-bottom: 8px;">
+                    🔄 Enter Boot Mode
+                </button>
+                <button onclick="buildOnly()" id="buildOnlyBtn"
+                    style="background: #3b82f6; color: #fff; margin-bottom: 8px;">
+                    🔧 Build Firmware Only
+                </button>
+                <button onclick="flashFirmware()" id="flashBtn" style="background: #a78bfa; color: #000;">
+                    ⚡ Flash to Device
+                </button>
+                <!-- Build Progress Bar -->
+                <div id="buildProgress" style="display:none; margin-top:10px;">
+                    <div style="background:#000; border-radius:4px; overflow:hidden; height:20px;">
+                        <div id="progressBar" style="background:#a78bfa; height:100%; width:0%; transition:width 0.3s;">
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
 
         <!-- RIGHT COL: CONTROLS GRID -->
         <div class="controls-column">
+
+
 
             <!-- PHYSICS -->
             <div class="panel">
@@ -298,7 +337,9 @@
             <div class="panel">
                 <h3>⚙️ Hardware</h3>
                 <div class="control-row"><label>Swap X/Y (90°)</label><input type="checkbox" id="sw_xy"></div>
-                <div class="control-row"><label>Enable Encoder</label><input type="checkbox" id="enc"></div>
+                <div class="control-row"><label>Enable Encoder (Experimental)</label><input type="checkbox" id="enc">
+                </div>
+                <div class="control-row"><label>I2C Connection</label><input type="checkbox" id="e_i2c"></div>
                 <div class="control-row"><label>Encoder Gain</label><input type="number" id="e_g" step="0.1"></div>
                 <div class="control-row"><label>Inv Encoder</label><input type="checkbox" id="e_i"></div>
             </div>
@@ -321,10 +362,89 @@
                 </div>
             </div>
 
+
+            <!-- LED CONTROL -->
+            <div class="panel">
+                <h3>🎨 LED Control</h3>
+                <div class="control-row">
+                    <label>Mode</label>
+                    <select id="l_mo">
+                        <option value="0">Off</option>
+                        <option value="1">Static Color</option>
+                        <option value="2">Rainbow</option>
+                        <option value="3">Pulse</option>
+                        <option value="4">Input Reactive</option>
+                        <option value="5">Directional (Ring)</option>
+                    </select>
+                </div>
+                <div class="control-row">
+                    <label>Color (RGB)</label>
+                    <div style="display:flex; gap:5px; flex:1;">
+                        <input type="number" id="l_r" min="0" max="255" placeholder="R" style="width:100%">
+                        <input type="number" id="l_g" min="0" max="255" placeholder="G" style="width:100%">
+                        <input type="number" id="l_b" min="0" max="255" placeholder="B" style="width:100%">
+                    </div>
+                </div>
+                <div class="control-row">
+                    <label>Brightness</label>
+                    <div style="flex:1; margin:0 10px;"><input type="range" id="l_br" min="0" max="255" step="1"></div>
+                    <span id="l_br_val">0</span>
+                </div>
+                <div class="control-row">
+                    <label>LED Rotation (°)</label>
+                    <div style="flex:1; margin:0 10px;"><input type="range" id="l_rot" min="0" max="360" value="0">
+                    </div>
+                    <span id="l_rot_val">0</span>
+                </div>
+            </div>
+
+            <!-- LOG PANEL -->
+            <div class="panel" style="grid-column: span 1; display:flex; flex-direction:column;">
+                <h3>📜 System Log <button onclick="clearLog()"
+                        style="float:right; width:auto; padding:2px 8px; font-size:12px;">Clear</button></h3>
+                <div id="sysLog" style="
+                    background: #111; 
+                    color: #0f0; 
+                    font-family: monospace; 
+                    flex: 1;
+                    min-height: 200px;
+                    overflow-y: auto; 
+                    padding: 10px; 
+                    border-radius: 4px; 
+                    border: 1px solid #333;
+                    font-size: 0.8rem;
+                "></div>
+            </div>
+
         </div>
     </div>
 
+
+
+    <!-- BUILD LOG (Hidden by default) -->
+    <div id="buildLog" class="build-log" style="display:none;"></div>
+
     <script>
+        // Logger
+        function log(msg, type = 'info') {
+            const sysLog = document.getElementById('sysLog');
+            if (!sysLog) return;
+
+            const ts = new Date().toLocaleTimeString();
+            let color = '#ccc';
+            if (type === 'success') color = '#4ade80';
+            else if (type === 'error') color = '#ef4444';
+            else if (type === 'tx') color = '#38bdf8'; // Blue for TX
+            else if (type === 'rx') color = '#fbbf24'; // Amber for RX
+
+            sysLog.innerHTML += `<div style="color:${color}"><span style="opacity:0.5">[${ts}]</span> ${msg}</div>`;
+            sysLog.scrollTop = sysLog.scrollHeight;
+        }
+
+        function clearLog() {
+            document.getElementById('sysLog').innerHTML = '';
+        }
+
         const AXES = ['tx', 'ty', 'tz', 'rx', 'ry', 'rz'];
         const AXIS_NAMES = ['Pan X', 'Pan Y', 'Zoom', 'Tilt X', 'Tilt Y', 'Twist'];
 
@@ -356,6 +476,20 @@
             ctx.fillStyle = '#38bdf8'; ctx.beginPath();
             ctx.arc(drawX, drawY, 6, 0, Math.PI * 2);
             ctx.fill();
+
+            // Calculate and display azimuth angle
+            const azimuth = Math.atan2(y, x) * (180 / Math.PI);
+            const azimuthNormalized = (azimuth + 360) % 360; // Normalize to 0-360°
+            const distance = Math.sqrt(x * x + y * y);
+
+            // Display azimuth text
+            ctx.fillStyle = '#38bdf8';
+            ctx.font = 'bold 12px system-ui';
+            ctx.textAlign = 'center';
+            ctx.fillText(`Az: ${azimuthNormalized.toFixed(1)}°`, 110, 20);
+
+            // Display distance (magnitude)
+            ctx.fillText(`Dist: ${distance.toFixed(2)}`, 110, 35);
 
             // Z Bar
             const h = Math.min(110, Math.abs(z * scale));
@@ -396,9 +530,20 @@
             document.getElementById('smooth').addEventListener('input', e => document.getElementById('smooth_val').innerText = e.target.value);
             document.getElementById('gamma').addEventListener('input', e => document.getElementById('gamma_val').innerText = e.target.value);
             drawVis(0, 0, 0);
+
+            // Init Live Preview
+            initPreviewEvents();
         }
         function updVal(id) { document.getElementById('val_' + id).innerText = document.getElementById(id).value; }
+
+        // Add LED brightness listener
+        function initLedEvents() {
+            document.getElementById('l_br').addEventListener('input', e => document.getElementById('l_br_val').innerText = e.target.value);
+            document.getElementById('l_rot').addEventListener('input', e => document.getElementById('l_rot_val').innerText = e.target.value);
+        }
+
         initUI();
+        initLedEvents();
 
         // --- SERIAL ---
         let port, reader, keepReading = false;
@@ -406,7 +551,9 @@
         document.getElementById('connectBtn').addEventListener('click', async () => {
             try {
                 port = await navigator.serial.requestPort({});
+                log("Port selected. Opening...", "info");
                 await port.open({ baudRate: 115200 });
+                log("Serial port opened successfully.", "success");
 
                 document.getElementById('connectOverlay').classList.add('hidden');
 
@@ -414,13 +561,28 @@
                 readLoop();
                 setTimeout(() => sendCommand("?"), 500);
                 setTimeout(() => toggleStream(), 1000);
-            } catch (e) { document.getElementById('status').innerText = e; }
+            } catch (e) {
+                log(`Connection Error: ${e.message}`, "error");
+                document.getElementById('status').innerText = e;
+            }
         });
 
         async function sendCommand(cmd) {
+            if (!port || !port.writable) {
+                log("Serial port not open!", "error");
+                return;
+            }
             const w = port.writable.getWriter();
-            await w.write(new TextEncoder().encode(cmd + "\n"));
-            w.releaseLock();
+            try {
+                // Log TX (except excessive PREVIEW spam)
+                if (!cmd.startsWith("PREVIEW")) log(`TX > ${cmd}`, "tx");
+
+                await w.write(new TextEncoder().encode(cmd + "\n"));
+            } catch (e) {
+                log(`Write Error: ${e.message}`, "error");
+            } finally {
+                w.releaseLock();
+            }
         }
 
         async function readLoop() {
@@ -439,13 +601,33 @@
 
         let buffer = "";
         function handleData(chunk) {
+            // Flash RX LED
+            const rx = document.getElementById('rxLed');
+            if (rx) {
+                rx.style.background = '#0f0';
+                setTimeout(() => rx.style.background = '#444', 50);
+            }
+
             buffer += chunk;
             const lines = buffer.split('\n');
             buffer = lines.pop();
 
             for (let line of lines) {
                 line = line.trim();
-                if (line.startsWith("{")) loadJson(line);
+
+                // DEBUG: Log first GRA packet to build log to verify data
+                if (line.startsWith("GRA:") && Math.random() < 0.05) {
+                    const log = document.getElementById('buildLog');
+                    if (log && log.style.display !== 'none') {
+                        log.innerHTML += `Rx: ${line}\n`;
+                        log.scrollTop = log.scrollHeight;
+                    }
+                }
+
+                if (line.startsWith("{")) {
+                    loadJson(line);
+                    log("Config received from device", "success");
+                }
                 else if (line.startsWith("GRA:")) {
                     const parts = line.substring(4).split(',');
                     // x, y, z, b1, b2, b3, b4
@@ -453,6 +635,13 @@
                     if (parts.length > 3) {
                         updateButtons(parseInt(parts[3]), parseInt(parts[4]), parseInt(parts[5]), parseInt(parts[6]));
                     }
+                }
+                else if (line === "OK") log("Device confirmed: Saved", "success");
+                else if (line === "OK_PREVIEW") { /* Ignore preview ack to reduce spam */ }
+                else if (line.startsWith("ERR")) log(`Device Error: ${line}`, "error");
+                else {
+                    // Log other messages (like startup info)
+                    if (line.length > 0) log(`RX < ${line}`, "rx");
                 }
             }
         }
@@ -467,23 +656,106 @@
                     setVal(`g_${ax}`, d[`g_${ax}`]); updVal(`g_${ax}`);
                     setCheck(`i_${ax}`, d[`i_${ax}`]);
                 });
-                setCheck('sw_xy', d.sw_xy); setCheck('enc', d.enc); setVal('e_g', d.e_g); setCheck('e_i', d.e_i);
+                setCheck('sw_xy', d.sw_xy);
+                setCheck('enc', d.enc);
+                setCheck('e_i2c', d.e_i2c); // New I2C Config
+                setVal('e_g', d.e_g);
+                setCheck('e_i', d.e_i);
+
+                // LED
+                setVal('l_mo', d.l_mo || 0);
+                setVal('l_r', d.l_r || 0); setVal('l_g', d.l_g || 0); setVal('l_b', d.l_b || 0);
+                setVal('l_br', d.l_br || 0); document.getElementById('l_br_val').innerText = d.l_br || 0;
+                setVal('l_rot', d.l_rot || 0); document.getElementById('l_rot_val').innerText = d.l_rot || 0;
+
                 if (d.btns) d.btns.forEach((b, i) => document.getElementById(`btn${i + 1}`).value = b);
             } catch (e) { console.error(e); }
         }
 
-        async function saveConfig() {
+        // Debounced Preview
+        let previewTimeout;
+        // Modified to accept event to send partial data
+        function sendPreview(e) {
+            clearTimeout(previewTimeout);
+            previewTimeout = setTimeout(async () => {
+                if (!port || !port.writable) return;
+
+                const el = e ? e.target : null;
+                let d = {};
+
+                // If triggered by specific element, send partial update
+                if (el && el.id) {
+                    const id = el.id;
+
+                    // Map ID to config key
+                    if (['smooth', 'gamma', 'dz', 'sw_xy', 'enc', 'e_i2c', 'e_g', 'e_i', 'l_mo', 'l_br'].includes(id)) {
+                        // Direct mapping types
+                        if (el.type === 'checkbox') d[id] = el.checked;
+                        else d[id] = parseFloat(el.value);
+                    }
+                    else if (id.startsWith('g_') || id.startsWith('i_') || id.startsWith('l_')) {
+                        // Axis gains/inverts OR Led colors (l_r, l_g, l_b)
+                        if (el.type === 'checkbox') d[id] = el.checked;
+                        else d[id] = parseFloat(el.value);
+                    }
+                    else if (id.startsWith('btn')) {
+                        // Buttons array - needed as full array
+                        d.btns = [1, 2, 3, 4].map(i => parseInt(document.getElementById(`btn${i}`).value));
+                    }
+                    else {
+                        // Fallback: Send full config if unsure
+                        d = getConfigObj();
+                    }
+                } else {
+                    // No event target? Send full config
+                    d = getConfigObj();
+                }
+
+                // Only send if we have data
+                if (Object.keys(d).length > 0) {
+                    // Log for debug (optional)
+                    // console.log("Sending partial preview:", d);
+                    await sendCommand("PREVIEW:" + JSON.stringify(d));
+                }
+            }, 300); // Increased debounce to 300ms to prevent flooding
+        }
+
+        // Helper to gather config logic (reused for SAVE and PREVIEW)
+        function getConfigObj() {
             const d = {};
             d.smooth = getFloat('smooth'); d.gamma = getFloat('gamma'); d.dz = getFloat('dz');
             AXES.forEach(ax => { d[`g_${ax}`] = getFloat(`g_${ax}`); d[`i_${ax}`] = getCheck(`i_${ax}`); });
-            d.sw_xy = getCheck('sw_xy'); d.enc = getCheck('enc'); d.e_g = getFloat('e_g'); d.e_i = getCheck('e_i');
+            d.sw_xy = getCheck('sw_xy');
+            d.enc = getCheck('enc');
+            d.e_i2c = getCheck('e_i2c'); // New I2C Config
+            d.e_g = getFloat('e_g');
+            d.e_i = getCheck('e_i');
 
-            // Dummy LED vals to keep JSON struct valid if FW expects it (though we removed checks in write)
-            // Actually FW parser still checks for l_mo etc. We can omit them, isNull check handles it.
-            // But let's send defaults just in case? No, isNull handles it. 
+            // LED
+            d.l_mo = parseInt(val('l_mo'));
+            d.l_r = parseInt(val('l_r')); d.l_g = parseInt(val('l_g')); d.l_b = parseInt(val('l_b'));
+            d.l_br = parseInt(val('l_br'));
+            d.l_rot = parseInt(val('l_rot'));
 
             d.btns = [1, 2, 3, 4].map(i => parseInt(document.getElementById(`btn${i}`).value));
+            return d;
+        }
+
+        async function saveConfig() {
+            const d = getConfigObj();
             await sendCommand("SAVE:" + JSON.stringify(d));
+        }
+
+        // Connect change events for Real-Time Preview
+        function initPreviewEvents() {
+            const inputs = document.querySelectorAll('input, select');
+            inputs.forEach(el => {
+                if (el.type === 'range' || el.type === 'number') {
+                    el.addEventListener('input', sendPreview);
+                } else {
+                    el.addEventListener('change', sendPreview);
+                }
+            });
         }
 
         window.resetConfig = async () => { if (confirm("Reset?")) await sendCommand("RESET"); };
@@ -492,6 +764,238 @@
         const setCheck = (id, v) => document.getElementById(id).checked = v;
         const getFloat = (id) => parseFloat(document.getElementById(id).value);
         const getCheck = (id) => document.getElementById(id).checked;
+
+        // ============================================================
+        // BUILD & FLASH FUNCTIONS (SEPARATED)
+        // ============================================================
+
+        const SERVER_URL = 'http://localhost:3000';
+        let lastBuildUF2 = null;
+
+        // Enter bootloader mode via 1200 baud reset
+        async function enterBootMode() {
+            const bootBtn = document.getElementById('bootBtn');
+            const buildProgress = document.getElementById('buildProgress');
+            const progressBar = document.getElementById('progressBar');
+            const buildLog = document.getElementById('buildLog');
+
+            bootBtn.disabled = true;
+            bootBtn.innerText = '⏳ Resetting...';
+
+            buildProgress.style.display = 'block';
+            buildLog.innerHTML = '';
+            progressBar.style.width = '30%';
+            progressBar.style.background = '#f59e0b';
+
+            buildLog.innerHTML += '[INFO] Triggering bootloader mode...\n';
+            buildLog.innerHTML += '[INFO] Using 1200 baud serial reset\n';
+
+            // If connected via Web Serial, try to send BOOTLOADER command first
+            if (port && port.readable) {
+                try {
+                    await sendCommand('BOOTLOADER');
+                    buildLog.innerHTML += '[INFO] BOOTLOADER command sent via Web Serial\n';
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+
+                    // Close serial connection
+                    keepReading = false;
+                    if (reader) {
+                        try {
+                            await reader.cancel();
+                        } catch (e) { }
+                    }
+                    await port.close();
+                    buildLog.innerHTML += '[INFO] Serial port closed\n';
+                } catch (err) {
+                    buildLog.innerHTML += `[WARN] Web Serial command failed: ${err.message}\n`;
+                    buildLog.innerHTML += '[INFO] Falling back to server-side reset...\n';
+                }
+            }
+
+            progressBar.style.width = '60%';
+
+            // Server-side 1200 baud reset (always try this as primary/fallback)
+            try {
+                const resp = await fetch(`${SERVER_URL}/api/bootloader`, {
+                    method: 'POST'
+                });
+                const data = await resp.json();
+
+                progressBar.style.width = '100%';
+
+                if (data.success) {
+                    buildLog.innerHTML += `[SUCCESS] ${data.message}\n`;
+                    buildLog.innerHTML += '\n[INFO] Device should now be in bootloader mode (RPI-RP2 drive)\n';
+                    buildLog.innerHTML += '[INFO] If RPI-RP2 drive appeared, you can now flash firmware.\n';
+                    bootBtn.innerText = '✅ Done!';
+
+                    setTimeout(() => {
+                        bootBtn.disabled = false;
+                        bootBtn.innerText = '🔄 Enter Boot Mode';
+                        buildProgress.style.display = 'none';
+                    }, 3000);
+                } else {
+                    buildLog.innerHTML += `[ERROR] ${data.error}\n`;
+                    buildLog.innerHTML += '\n[INFO] Manual bootloader entry required:\n';
+                    buildLog.innerHTML += '  1. Hold BOOT button\n';
+                    buildLog.innerHTML += '  2. Press RESET button\n';
+                    buildLog.innerHTML += '  3. Release BOOT button\n';
+                    progressBar.style.background = '#ef4444';
+                    bootBtn.innerText = '❌ Failed';
+                    bootBtn.disabled = false;
+                }
+            } catch (err) {
+                buildLog.innerHTML += `[ERROR] ${err.message}\n`;
+                buildLog.innerHTML += '\nIs the build server running? Run start-server.bat\n';
+                progressBar.style.width = '100%';
+                progressBar.style.background = '#ef4444';
+                bootBtn.disabled = false;
+                bootBtn.innerText = '🔄 Enter Boot Mode';
+            }
+        }
+
+        // Build firmware only - no bootloader interaction
+        async function buildOnly() {
+            const buildBtn = document.getElementById('buildOnlyBtn');
+            const buildProgress = document.getElementById('buildProgress');
+            const progressBar = document.getElementById('progressBar');
+            const buildLog = document.getElementById('buildLog');
+
+            buildBtn.disabled = true;
+            buildBtn.innerText = '⏳ Building...';
+
+            buildProgress.style.display = 'block';
+            buildLog.innerHTML = '';
+            progressBar.style.width = '10%';
+            progressBar.style.background = '#3b82f6';
+
+            try {
+                buildLog.innerHTML += '[INFO] Starting firmware compilation...\n';
+
+                const eventSource = new EventSource(`${SERVER_URL}/api/build`);
+
+                eventSource.addEventListener('start', (e) => {
+                    const data = JSON.parse(e.data);
+                    buildLog.innerHTML += `[BUILD] ${data.message}\n`;
+                    progressBar.style.width = '30%';
+                });
+
+                eventSource.addEventListener('output', (e) => {
+                    const data = JSON.parse(e.data);
+                    buildLog.innerHTML += data.text;
+                    buildLog.scrollTop = buildLog.scrollHeight;
+                    progressBar.style.width = '70%';
+                });
+
+                eventSource.addEventListener('error', (e) => {
+                    const data = JSON.parse(e.data);
+                    buildLog.innerHTML += `[ERROR] ${data.text}\n`;
+                    buildLog.scrollTop = buildLog.scrollHeight;
+                });
+
+                eventSource.addEventListener('complete', async (e) => {
+                    const data = JSON.parse(e.data);
+                    eventSource.close();
+
+                    if (data.success) {
+                        lastBuildUF2 = data.uf2File;
+                        buildLog.innerHTML += `[SUCCESS] ${data.message}\n`;
+                        buildLog.innerHTML += `[INFO] UF2 file ready: ${data.uf2File}\n`;
+                        buildLog.innerHTML += `\n[NEXT] Put device in bootloader mode (hold BOOT, press RESET) then click "⚡ Flash to Device"\n`;
+                        progressBar.style.width = '100%';
+                        buildBtn.innerText = '✅ Build Complete!';
+                        document.getElementById('flashBtn').disabled = false;
+
+                        setTimeout(() => {
+                            buildBtn.disabled = false;
+                            buildBtn.innerText = '🔧 Build Firmware Only';
+                        }, 3000);
+                    } else {
+                        buildLog.innerHTML += `[ERROR] ${data.error}\n`;
+                        if (data.stderr) buildLog.innerHTML += data.stderr;
+                        progressBar.style.width = '100%';
+                        progressBar.style.background = '#ef4444';
+                        buildBtn.innerText = '❌ Build Failed';
+                        buildBtn.disabled = false;
+                    }
+
+                    buildLog.scrollTop = buildLog.scrollHeight;
+                });
+
+            } catch (err) {
+                buildLog.innerHTML += `[ERROR] ${err.message}\n`;
+                buildLog.innerHTML += `\nIs the build server running? Run start-server.bat\n`;
+                buildBtn.disabled = false;
+                buildBtn.innerText = '🔧 Build Firmware Only';
+                progressBar.style.width = '100%';
+                progressBar.style.background = '#ef4444';
+            }
+        }
+
+        // Flash pre-built firmware
+        async function flashFirmware() {
+            const flashBtn = document.getElementById('flashBtn');
+            const buildProgress = document.getElementById('buildProgress');
+            const progressBar = document.getElementById('progressBar');
+            const buildLog = document.getElementById('buildLog');
+
+            if (!lastBuildUF2) {
+                alert('Please build firmware first using "🔧 Build Firmware Only" button');
+                return;
+            }
+
+            flashBtn.disabled = true;
+            flashBtn.innerText = '⏳ Flashing...';
+
+            buildProgress.style.display = 'block';
+            buildLog.innerHTML = '';
+            progressBar.style.width = '20%';
+            progressBar.style.background = '#a78bfa';
+
+            buildLog.innerHTML += '[INFO] Waiting for bootloader...\n';
+            buildLog.innerHTML += '[INFO] If RPI-RP2 drive is already visible, flashing will start automatically.\n';
+            buildLog.innerHTML += '[INFO] Otherwise, put device in bootloader mode:\n';
+            buildLog.innerHTML += '       1. Hold BOOT button\n';
+            buildLog.innerHTML += '       2. Press RESET button\n';
+            buildLog.innerHTML += '       3. Release BOOT button\n';
+            buildLog.innerHTML += '       4. Wait for RPI-RP2 drive...\n\n';
+
+            try {
+                progressBar.style.width = '50%';
+
+                const flashResp = await fetch(`${SERVER_URL}/api/flash`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ uf2Path: lastBuildUF2 })
+                });
+                const flashData = await flashResp.json();
+
+                if (flashData.success) {
+                    buildLog.innerHTML += `[SUCCESS] ${flashData.message}\n`;
+                    progressBar.style.width = '100%';
+                    flashBtn.innerText = '✅ Flashed!';
+
+                    setTimeout(() => {
+                        flashBtn.disabled = false;
+                        flashBtn.innerText = '⚡ Flash to Device';
+                        buildProgress.style.display = 'none';
+                    }, 3000);
+                } else {
+                    buildLog.innerHTML += `[ERROR] ${flashData.error}\n`;
+                    buildLog.innerHTML += `\nMake sure device is in bootloader mode (RPI-RP2 drive visible)\n`;
+                    flashBtn.innerText = '❌ Flash Failed';
+                    flashBtn.disabled = false;
+                    progressBar.style.background = '#ef4444';
+                }
+
+            } catch (err) {
+                buildLog.innerHTML += `[ERROR] ${err.message}\n`;
+                flashBtn.disabled = false;
+                flashBtn.innerText = '⚡ Flash to Device';
+                progressBar.style.width = '100%';
+                progressBar.style.background = '#ef4444';
+            }
+        }
 
     </script>
 </body>

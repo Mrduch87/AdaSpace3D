@@ -4,3 +4,17 @@ output/
 *.bin
 *.elf
 *.map
+
+# Backup and temp folders
+AdaSpace3D-DuchFork/
+Build_Temp/
+example/
+
+# Node.js
+node_modules/
+package-lock.json
+
+# Build logs
+*.log
+build*.log
+*.txt
